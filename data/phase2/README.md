@@ -33,3 +33,25 @@ python3 data/phase2/generate_phase2_medium.py --output data/phase2/phase2_medium
 ```
 
 Changing the seed creates a different reproducible instance. The input format is documented in the root README.
+
+## India-scale Phase 2 benchmark
+
+- `phase2_india_scale_input.txt`: Phase 2-formatted version of the large Phase 1 graph (100 warehouses, 2,630 DCs, 19,000 customer zones, 37,436 routes).
+- `phase2_india_scale_candidate_facilities.csv`: metadata for all 2,630 DCs; 2,618 are existing and 12 are optional candidates spread across the DC ID range.
+- `phase2_india_scale_manifest.json`: dimensions, candidate IDs, budget, and synthetic-data provenance.
+- `generate_phase2_india_scale.py`: regenerates these files from the Phase 1 input with a fixed seed.
+
+This is a large graph with a deliberately small candidate pool so the heuristic algorithms remain practical on a personal computer. **Run with `--heuristics-only`** to skip exhaustive Backtracking. Even Greedy and Local Search perform repeated maximum-flow evaluations, so runtime depends on hardware. The facility costs and handling capacities are synthetic assumptions, not actual Amazon data.
+
+Windows PowerShell from the repository root:
+
+```powershell
+g++ -O2 -std=c++17 src/phase2.cpp -o optiroute_phase2.exe
+cmd /c ".\\optiroute_phase2.exe --heuristics-only < data\\phase2\\phase2_india_scale_input.txt"
+```
+
+Regenerate the large Phase 2 dataset:
+
+```powershell
+python data/phase2/generate_phase2_india_scale.py --phase1-input data/large/india_amazon_scale_input.txt --output-dir data/phase2 --seed 20261022
+```

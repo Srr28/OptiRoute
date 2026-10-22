@@ -1,0 +1,31 @@
+{
+  "dataset": "OptiRoute Phase 2 India-scale facility selection benchmark",
+  "synthetic_not_actual_amazon_data": true,
+  "seed": 20261022,
+  "derived_from": "data/large/india_amazon_scale_input.txt",
+  "warehouses": 100,
+  "distribution_centres": 2630,
+  "customer_zones": 19000,
+  "real_nodes": 21730,
+  "directed_routes": 37436,
+  "existing_facilities": 2618,
+  "candidate_facilities": 12,
+  "candidate_dc_indices_1_based": [
+    1,
+    240,
+    479,
+    718,
+    957,
+    1196,
+    1435,
+    1674,
+    1913,
+    2152,
+    2391,
+    2630
+  ],
+  "budget_synthetic_cost_units": 8317,
+  "opening_cost_total_candidates": 12796,
+  "recommended_mode": "--heuristics-only; exhaustive backtracking is not appropriate for a country-scale graph",
+  "capacity_note": "Existing DC handling capacities are set permissively from adjacent route capacities; candidate DC capacities use min(total incoming route capacity, total outgoing route capacity). All values are synthetic model assumptions."
+}

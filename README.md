@@ -135,6 +135,16 @@ cmd /c ".\\optiroute_phase2.exe < data\\phase2\\phase2_medium_input.txt"
 
 This benchmark intentionally has 24 candidates, above the exact-search limit, so Backtracking reports that it is skipped while Greedy and Local Search run. The instance and its companion CSV are synthetic. See [`data/phase2/README.md`](data/phase2/README.md) and [`data/phase2/manifest.json`](data/phase2/manifest.json) for provenance and regeneration instructions.
 
+### India-scale Phase 2 benchmark
+
+Phase 2 also includes a large input derived from the Phase 1 India-scale synthetic network: 100 warehouses, 2,630 DCs, 19,000 customer zones, and 37,436 routes. It has 2,618 existing DCs and 12 optional candidate DCs. The candidate pool is deliberately limited to keep repeated max-flow evaluations more practical.
+
+```powershell
+cmd /c ".\optiroute_phase2.exe --heuristics-only < data\phase2\phase2_india_scale_input.txt"
+```
+
+Use `--heuristics-only` on this large graph to skip exhaustive Backtracking. Greedy and Local Search still run repeated Dinic computations and may take substantially longer than the small/medium examples. The facility costs and handling capacities are synthetic assumptions. See [`data/phase2/README.md`](data/phase2/README.md).
+
 ## Synthetic India-scale dataset summary
 
 | Metric | Value |

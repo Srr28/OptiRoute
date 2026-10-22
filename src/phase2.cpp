@@ -374,9 +374,20 @@ public:
     }
 };
 
-int main() {
+int main(int argc, char* argv[]) {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
+
+    bool heuristicsOnly = false;
+    for (int i = 1; i < argc; ++i) {
+        string arg = argv[i];
+        if (arg == "--heuristics-only") heuristicsOnly = true;
+        else {
+            cerr << "Unknown argument: " << arg << "\n"
+                 << "Supported argument: --heuristics-only\n";
+            return 1;
+        }
+    }
 
     int W, D, C;
     ll budget;
@@ -465,17 +476,22 @@ int main() {
     cout << "Warehouses: " << W << ", DCs: " << D << ", customers: " << C << '\n';
     cout << "Candidate DCs: " << candidateCount << ", budget: " << budget << '\n';
 
-    auto start = chrono::steady_clock::now();
-    Solution exact = optimizer.backtracking();
-    auto end = chrono::steady_clock::now();
-    double backtrackingMs = chrono::duration<double, milli>(end - start).count();
-    if (exact.valid) optimizer.printSolution("BACKTRACKING (EXACT ON SMALL INSTANCES)", exact);
-    cout << fixed << setprecision(3);
-    if (exact.valid) cout << "Runtime: " << backtrackingMs << " ms\n";
+    Solution exact;
+    if (heuristicsOnly) {
+        cout << "Backtracking skipped by --heuristics-only (recommended for large graphs).\n";
+    } else {
+        auto start = chrono::steady_clock::now();
+        exact = optimizer.backtracking();
+        auto end = chrono::steady_clock::now();
+        double backtrackingMs = chrono::duration<double, milli>(end - start).count();
+        if (exact.valid) optimizer.printSolution("BACKTRACKING (EXACT ON SMALL INSTANCES)", exact);
+        cout << fixed << setprecision(3);
+        if (exact.valid) cout << "Runtime: " << backtrackingMs << " ms\n";
+    }
 
-    start = chrono::steady_clock::now();
+    auto start = chrono::steady_clock::now();
     Solution greedy = optimizer.greedy();
-    end = chrono::steady_clock::now();
+    auto end = chrono::steady_clock::now();
     double greedyMs = chrono::duration<double, milli>(end - start).count();
     optimizer.printSolution("GREEDY", greedy);
     cout << fixed << setprecision(3) << "Runtime: " << greedyMs << " ms\n";
