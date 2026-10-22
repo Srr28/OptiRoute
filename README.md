@@ -2,18 +2,13 @@
 
 ### Large-Scale Network Optimization and Resource Allocation Engine
 
-OptiRoute is a C++17 project for studying capacity-constrained logistics networks with graph algorithms. It computes maximum deliverable flow, extracts a minimum cut to reveal network bottlenecks, and validates the max-flow/min-cut equality. The repository includes two algorithm approaches—DFS-based Ford–Fulkerson and Dinic—plus small, medium, and country-scale synthetic datasets.
+OptiRoute is a C++17 project for modeling capacitated logistics networks and studying maximum throughput, bottlenecks, and budget-constrained facility selection.
 
-> **Data note:** The India-scale graph is synthetic and inspired by the scale of nationwide logistics systems. It is not Amazon's internal network, not a measured road network, and not actual warehouse/customer data. Capacities and demand are simulated model units per day. Read [`data/large/README.md`](data/large/README.md) for provenance and assumptions.
+- **Phase 1:** Ford–Fulkerson, Dinic's maximum-flow algorithm, and minimum-cut validation on a fixed network.
+- **Phase 2:** budget-constrained selection of optional distribution centers using **Backtracking**, **Greedy**, and **Local Search**. Each candidate solution is evaluated by rebuilding the network and running Dinic.
+- **Large-graph validation:** a Dinic-only validator for the synthetic India-scale dataset.
 
-## Features
-
-- **Ford–Fulkerson:** DFS augmenting paths; useful for learning and small/medium graphs.
-- **Dinic:** BFS level graph plus DFS blocking flow; preferred for the included large graph.
-- **Minimum-cut analysis:** reports the capacity of the cut induced by Dinic's final residual graph.
-- **Correctness check:** verifies that the computed max-flow value equals the cut capacity.
-- **Multiple datasets:** a small deterministic example, a medium synthetic graph, and a large India-scale graph with node and route metadata.
-- **Large-network validator:** a separate Dinic-only validator checks the country-scale input and verifies max-flow/min-cut equality.
+> **Data provenance:** The India-scale dataset is a synthetic simulation inspired by publicly described logistics-network scale. It is **not** Amazon's internal data, an actual facility inventory, a real road map, or measured package throughput. All generated route capacities, supplies, and demands are model parameters. See [`data/large/README.md`](data/large/README.md).
 
 ## Repository layout
 
@@ -21,116 +16,149 @@ OptiRoute is a C++17 project for studying capacity-constrained logistics network
 optiroute/
 ├── README.md
 ├── LICENSE
-├── .gitignore
-├── .gitattributes
 ├── CMakeLists.txt
 ├── src/
-│   └── optiroute.cpp                 # Ford–Fulkerson + Dinic + min-cut
+│   ├── optiroute.cpp        # Phase 1: Ford–Fulkerson + Dinic + minimum cut
+│   └── phase2.cpp           # Phase 2: Backtracking + Greedy + Local Search
 ├── data/
-│   ├── README.md
 │   ├── examples/
 │   │   ├── small_network.txt
-│   │   └── medium_network.txt
-│   └── large/
-│       ├── india_amazon_scale_input.txt
-│       ├── india_amazon_scale_nodes.csv
-│       ├── india_amazon_scale_routes.csv
-│       ├── india_amazon_scale_demand_by_state.csv
-│       ├── manifest.json
-│       ├── generate_india_logistics_scale.py
-│       └── README.md
+│   │   ├── medium_network.txt
+│   │   └── phase2_facility_selection.txt
+│   ├── phase2/              # Phase 2 medium benchmark, metadata, generator
+│   └── large/               # Synthetic India-scale Phase 1 input and CSV datasets
 └── validator/
-    ├── dinic_validator.cpp
+    ├── dinic_validator.cpp  # Dinic-only large-graph validator
+    ├── expected_large_output.txt
     └── README.md
 ```
 
+No smoke-test framework or smoke-test script is included.
+
 ## Requirements
 
-- A C++17 compiler such as GCC or Clang (the current source uses `<bits/stdc++.h>`, so MSVC is not supported without adapting the includes).
-- Python 3 is only needed if you want to regenerate the synthetic country-scale dataset; it is not required to compile or run the C++ programs.
-- CMake 3.16+ is optional; direct `g++` commands work too.
+- C++17 compiler (GCC, Clang, or recent MSVC)
+- CMake 3.16+ (optional)
 
-## Build and run on Windows PowerShell
+## Build on Windows (PowerShell)
 
-Compile the main program and the large-graph validator:
+From the repository root:
 
 ```powershell
 g++ -O2 -std=c++17 src/optiroute.cpp -o optiroute.exe
+g++ -O2 -std=c++17 src/phase2.cpp -o optiroute_phase2.exe
 g++ -O2 -std=c++17 validator/dinic_validator.cpp -o optiroute_validate_large.exe
 ```
 
-Run the combined solver against the small example to inspect both algorithm outputs:
+## Phase 1: fixed-network maximum flow
+
+Run the combined Ford–Fulkerson/Dinic implementation on a small example:
 
 ```powershell
 cmd /c ".\optiroute.exe < data\examples\small_network.txt"
 ```
 
-Expected results for this example: Ford–Fulkerson flow `15`, Dinic flow `15`, minimum-cut capacity `15`, and `Max-flow/min-cut check: PASS`.
+The program reports both maximum-flow results, their runtimes, and the minimum cut from Dinic's residual graph. The max-flow/min-cut check should pass.
 
-Run the combined solver on the medium graph:
-
-```powershell
-cmd /c ".\optiroute.exe < data\examples\medium_network.txt"
-```
-
-Run the country-scale dataset with the Dinic-only validator:
+For the country-scale synthetic graph, run the Dinic-only validator:
 
 ```powershell
 cmd /c ".\optiroute_validate_large.exe < data\large\india_amazon_scale_input.txt"
 ```
 
-**Why a separate large validator?** The main executable runs Ford–Fulkerson and Dinic sequentially. DFS-based Ford–Fulkerson may take a long time on the country-scale graph, so the separate validator uses Dinic only and checks the max-flow/min-cut equality without waiting for Ford–Fulkerson.
+The combined Phase 1 executable runs DFS-based Ford–Fulkerson first, which may be very slow on the large graph. Use the Dinic-only validator for that dataset.
 
-## Build with CMake (optional)
+## Phase 2: facility selection under a budget
+
+Run the example:
 
 ```powershell
-cmake -S . -B build
-cmake --build build --config Release
+cmd /c ".\optiroute_phase2.exe < data\examples\phase2_facility_selection.txt"
 ```
 
+The example is intentionally small and demonstrates complementarity: two candidate DCs together provide more flow than the individually attractive choice selected by Greedy. Backtracking finds the exact best subset, while Local Search improves the Greedy result using add, remove, swap, pair-add, and (for at most 40 candidates) one-for-two pair-swap moves. A reproducible medium benchmark is available under `data/phase2/`.
 
-## Input format
+### Phase 2 input format
 
-The C++ programs use this whitespace-separated format:
+All values are whitespace-separated; line breaks are for readability. Node IDs follow the same Phase 1 convention.
 
-1. Header: `W D C` — number of warehouses, distribution centers, and customer zones.
-2. `W` nonnegative integer supply values.
-3. `C` nonnegative integer demand values.
-4. `M` — number of directed transport routes.
-5. `M` rows containing `from_id to_id capacity`.
+```text
+W D C
+budget
+W supply values
+C demand values
+D rows: opening_cost handling_capacity status
+M
+M rows: from_node to_node capacity
+```
 
-Real nodes use 1-based IDs: warehouses are `1..W`, distribution centers are `W+1..W+D`, and customer zones are `W+D+1..W+D+C`. The solver adds a super-source linked to warehouses by supply capacities and links customer zones to a super-sink by demand capacities.
+- `W`: number of warehouses.
+- `D`: total number of distribution centers (existing and optional).
+- `C`: number of customer zones.
+- `budget`: maximum total opening cost for optional DCs.
+- Warehouse supplies: one nonnegative integer per warehouse.
+- Customer demands: one nonnegative integer per customer zone.
+- Each DC row contains:
+  - `opening_cost`: nonnegative integer. Must be `0` for existing facilities.
+  - `handling_capacity`: maximum throughput of that DC.
+  - `status`: `0` for an existing DC (always active), `1` for an optional candidate (initially closed).
+- `M`: number of directed transportation routes.
+- Each route row contains `from_node to_node capacity` with node IDs in `1..W+D+C`.
 
-## Country-scale benchmark
+Node IDs are assigned as follows:
+
+- Warehouses: `1..W`
+- Distribution centers: `W+1..W+D`
+- Customer zones: `W+D+1..W+D+C`
+
+Phase 2 internally splits each node into an in-node and an out-node. The edge between the two sides of a DC enforces its handling capacity. For a closed candidate DC, that edge has capacity zero, preventing flow through that facility. Route capacities remain independent of opening costs; the opening cost only affects the budget constraint.
+
+### Phase 2 algorithms
+
+- **Backtracking:** enumerates feasible candidate subsets and returns the exact optimum when the candidate count is at most 18. It is exponential and is intended as a baseline for small instances.
+- **Greedy:** repeatedly opens the affordable candidate with the largest positive marginal flow gain per unit opening cost. It is fast relative to exhaustive search but is not guaranteed to find the optimum and can miss complementary facilities.
+- **Local Search:** starts from the Greedy solution and evaluates single add/remove moves, one-for-one swaps, and—when there are at most 40 candidates—pair-add and one-for-two pair-swap moves. This can escape some greedy choices but is still a heuristic, not an optimality guarantee.
+- **Dinic:** evaluates the maximum deliverable flow for each facility subset.
+
+The program prints selected candidate DC indices (1-based within the DC list), opening cost, maximum flow, runtime, and the flow gap versus Backtracking when the exact result is available. It also reports the number of max-flow evaluations because each evaluation rebuilds the residual network. Existing DCs are always active and are not included in the opening budget.
+
+**Scalability note:** this Phase 2 implementation is designed for small/medium candidate-selection instances. Backtracking is limited to 18 candidates; Greedy and Local Search can still be expensive on large graphs because they repeatedly run Dinic. Do not run all methods over thousands of candidates without further optimization or a reduced candidate pool.
+
+
+### Medium Phase 2 benchmark
+
+Run the supplied medium instance (10 warehouses, 30 DCs, 40 customer zones, 6 existing DCs, 24 candidate DCs, and 275 directed routes):
+
+```powershell
+cmd /c ".\\optiroute_phase2.exe < data\\phase2\\phase2_medium_input.txt"
+```
+
+This benchmark intentionally has 24 candidates, above the exact-search limit, so Backtracking reports that it is skipped while Greedy and Local Search run. The instance and its companion CSV are synthetic. See [`data/phase2/README.md`](data/phase2/README.md) and [`data/phase2/manifest.json`](data/phase2/manifest.json) for provenance and regeneration instructions.
+
+## Synthetic India-scale dataset summary
 
 | Metric | Value |
 |---|---:|
-| Warehouse/source nodes | 100 |
-| Distribution/transfer nodes | 2,630 |
+| Warehouses / source nodes | 100 |
+| Distribution-center-like nodes | 2,630 |
 | Customer destination zones | 19,000 |
-| Real nodes | 21,730 |
+| Real graph nodes | 21,730 |
 | Directed transport routes | 37,436 |
 | Synthetic total supply | 5,606,465 units/day |
 | Synthetic total demand | 5,191,173 units/day |
 | Recorded Dinic maximum flow | 5,041,042 units/day |
-| Recorded demand satisfied | 97.11% |
+| Recorded demand satisfaction | 97.11% |
 | Max-flow/min-cut check | PASS |
 
-Run time depends on hardware, compiler, build flags, and system load. Do not treat one runtime as a universal performance guarantee. Flow capacities are **synthetic model units per day**, not package counts or measurements reported by Amazon.
+Runtime depends on machine and compiler. These are synthetic modeled units/day, not package counts from a real operator.
 
-## How the algorithms work
+## Core concepts
 
-- **Maximum flow** finds the greatest total flow that can be routed from source to sink without exceeding edge capacities.
-- **Ford–Fulkerson** repeatedly searches for an augmenting path with DFS and updates residual capacities.
-- **Dinic** builds BFS levels and sends blocking flow with DFS, then repeats until no source-to-sink path remains.
-- **Minimum cut** is obtained by finding vertices still reachable from the source in the final residual graph. The sum of original capacities crossing from reachable to unreachable vertices must equal maximum flow.
-
-## Current scope and roadmap
-
-**Implemented:** maximum flow, minimum-cut extraction, two flow approaches, large graph validation, and deterministic input examples.
-
-**Planned next:** budget-constrained facility selection; exact backtracking for small cases; greedy, local search, and simulated annealing for larger cases; a repeatable benchmark harness with median runtimes and solution-quality comparisons. These facility-selection features are not implemented in the current version.
+- **Maximum flow:** computes the maximum deliverable quantity through a capacitated directed graph.
+- **Minimum cut:** identifies a capacity bottleneck; its capacity equals maximum flow for a completed max-flow computation.
+- **Facility selection:** chooses optional DCs under a budget to maximize network throughput.
+- **Exact vs heuristic optimization:** Backtracking provides an exact baseline for small instances; Greedy and Local Search trade guarantees for reduced search effort.
 
 ## License
 
-Released under the MIT License. See [`LICENSE`](LICENSE).
+MIT. Review the license and update its copyright line if needed before publishing.
