@@ -1,0 +1,31 @@
+# Build outputs
+build/
+cmake-build-*/
+dist/
+*.exe
+*.out
+*.o
+*.obj
+*.pdb
+*.ilk
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python caches / virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/

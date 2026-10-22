@@ -1,0 +1,41 @@
+{
+  "random_seed": 20261020,
+  "country": "India",
+  "synthetic_not_actual_amazon_graph": true,
+  "warehouses_or_fulfilment_nodes": 100,
+  "sortation_and_linehaul_hubs": 180,
+  "last_mile_delivery_stations_modelled": 2150,
+  "micro_fulfilment_centres_modelled": 300,
+  "distribution_centres_total_D": 2630,
+  "customer_destination_zones_C": 19000,
+  "real_nodes_W_plus_D_plus_C": 21730,
+  "route_edges_M": 37436,
+  "total_synthetic_supply_units_per_day": 5606465,
+  "total_synthetic_demand_units_per_day": 5191173,
+  "supply_to_demand_ratio": 1.08,
+  "sum_route_capacity_units_per_day": 70403095,
+  "dinic_validation_max_flow_units_per_day": 5041042,
+  "dinic_validation_demand_satisfied_percent": 97.11,
+  "dinic_validation_min_cut_check": "PASS",
+  "route_types": {
+    "warehouse_to_sort": 875,
+    "sort_to_last_mile": 2150,
+    "backup_sort_to_last_mile": 1592,
+    "sort_to_micro_fulfilment": 300,
+    "backup_sort_to_micro_fulfilment": 206,
+    "last_mile_to_customer_zone": 19000,
+    "alternate_last_mile_to_customer_zone": 5988,
+    "micro_fulfilment_to_customer_zone": 4501,
+    "sort_interhub_corridor": 1062,
+    "interregion_trunk": 60,
+    "local_station_transfer": 1702
+  },
+  "node_types": {
+    "fulfilment_centre": 100,
+    "sort_hub": 180,
+    "last_mile_station": 2150,
+    "micro_fulfilment_centre": 300,
+    "customer_zone": 19000
+  },
+  "route_type_warning": "Route counts and capacities are generated assumptions, not Amazon measurements."
+}
