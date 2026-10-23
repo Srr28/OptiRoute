@@ -1,12 +1,12 @@
 # OptiRoute
 
-**A C++17 logistics-network optimization project**
+**Logistics Network Flow and Facility Optimization in C++17**
 
-OptiRoute models a directed logistics network and applies maximum-flow algorithms to measure how much supply can reach customer demand. It also models a budget-constrained facility-selection problem: choose which optional distribution centers (DCs) to open so that the network delivers as much flow as possible without exceeding the available budget.
+OptiRoute is a graph-algorithms project that models a directed logistics network. Warehouses provide supply, distribution centers (DCs) transfer and process goods, and customer zones have demand. The project measures how much demand the network can serve and studies which optional DCs should be opened when there is a limited budget.
 
-The repository is intentionally organized around two readable C++ programs and six plain-text input files. There are no test frameworks, smoke-test scripts, or additional runtime dependencies.
+The code uses a straightforward competitive-programming style: standard C++17, adjacency lists, `vector`, `queue`, recursive DFS, and `long long` capacities. It has no external libraries or build system.
 
-## Repository structure
+## Contents
 
 ```text
 optiroute/
@@ -25,178 +25,176 @@ optiroute/
         └── large.txt
 ```
 
-### Programs
+## What the project does
 
-| File | Purpose |
-|---|---|
-| `src/network_flow.cpp` | Runs Ford–Fulkerson and Dinic on the same network, reports maximum flow and runtimes, and verifies the max-flow/min-cut relationship. |
-| `src/facility_optimizer.cpp` | Selects optional DCs under a budget using exhaustive Backtracking. Dinic evaluates the flow of each selection. |
+### Phase 1: Network flow
 
-### Datasets
+`src/network_flow.cpp` runs two maximum-flow algorithms on the same network:
 
-Each program has its own input format, so use files only from the corresponding data folder.
+- **Ford–Fulkerson:** repeatedly finds an augmenting path using DFS in the residual graph.
+- **Dinic:** builds a level graph with BFS and sends blocking flow using DFS.
 
-| Dataset | Intended use |
-|---|---|
-| `small.txt` | Understand the input format and verify behavior quickly. |
-| `medium.txt` | Run a more representative benchmark while keeping execution practical. |
-| `large.txt` | Run a larger synthetic logistics-network experiment. |
+The program reports both maximum-flow values and runtimes. It also builds a minimum cut from Dinic's final residual graph and checks that the cut capacity equals the maximum flow.
 
-The large network-flow dataset contains a synthetic network with 100 warehouses, 2,630 DC-like nodes, 19,000 customer zones, and 37,436 directed routes. The large facility-optimization dataset uses the same overall node scale and a budget with a smaller set of optional candidate DCs. Opening costs and facility capacities are modeled values. These are **synthetic demonstration datasets**, not actual Amazon operational data.
+### Phase 2: Facility selection
 
-## Requirements
+`src/facility_optimizer.cpp` chooses optional DCs while respecting an opening budget. For each proposed selection, it rebuilds the flow network and uses Dinic to calculate the throughput.
 
-- A C++17-compatible compiler; `g++` is recommended.
-- Windows PowerShell or Command Prompt, Linux, or macOS terminal.
-- Enough memory for the selected dataset.
+It compares three approaches:
 
-No third-party C++ libraries are required.
+1. **Backtracking (exact):** explores all budget-feasible combinations, up to 18 optional DCs. It returns an optimal selection within that limit.
+2. **Greedy heuristic:** repeatedly opens the affordable DC with the highest positive marginal flow gain per unit of opening cost. It is a heuristic; no approximation ratio is claimed.
+3. **Local Search:** starts from the Greedy solution and checks single-DC additions, two-DC additions, one-for-two replacements, removals, and one-for-one swaps. It accepts an improvement in flow, or a lower-cost solution with the same flow. Pair additions and one-for-two replacements are enabled for at most 40 candidates.
 
-## Quick start on Windows
+The three methods optimize the same primary objective: **maximize delivered flow subject to the opening budget**. If two solutions deliver equal flow, the lower-cost solution is preferred.
 
-Open PowerShell in the repository root—the directory containing this README.
+## How DC handling capacity works
 
-### 1. Build and run the network-flow program
+A route capacity limits how much flow can travel along one directed route. A DC handling capacity limits how much total flow can pass through that DC, summed across all its incoming and outgoing routes.
 
-Compile:
+Both programs enforce DC capacity by **node splitting**. Each real node `v` is represented by `in(v)` and `out(v)`, joined by an edge:
 
-```powershell
-g++ -O2 -std=c++17 src/network_flow.cpp -o network_flow.exe
+```text
+in(v) -- handling capacity --> out(v)
 ```
 
-Run the small input:
+For DCs, this edge has the DC's configured handling capacity. Warehouse and customer split edges receive a sufficiently large capacity; their actual limits are enforced by the source-to-warehouse supply edges and customer-to-sink demand edges. Transportation routes connect `out(u)` to `in(v)`.
 
-```powershell
-cmd /c ".\network_flow.exe < data\network_flow\small.txt"
+In Phase 2, a closed optional DC receives handling capacity zero. An opened DC receives its configured handling capacity. Existing DCs are always active and do not consume the opening budget.
+
+The Phase 1 datasets now include explicit DC handling capacities as well. Their synthetic capacities are generated from the smaller of each DC's aggregate incoming-route capacity and aggregate outgoing-route capacity, then stored in the input file so that the constraint is applied by the program.
+
+## Input formats
+
+All node IDs are 1-based:
+
+- Warehouses: `1` through `W`
+- DCs: `W+1` through `W+D`
+- Customers: `W+D+1` through `W+D+C`
+
+All capacities, supplies, demands, and opening costs must be nonnegative integers. Routes are directed.
+
+### Phase 1 input: `data/network_flow/*.txt`
+
+```text
+W D C
+W supply values
+C demand values
+D DC handling-capacity values
+M
+M lines: from_node to_node route_capacity
 ```
 
-Run the medium input:
+For example, the small dataset begins with `2 2 3`: two warehouses, two DCs, and three customers. The following lines provide two supplies, three demands, two DC handling capacities, and then the route count and route rows.
 
-```powershell
-cmd /c ".\network_flow.exe < data\network_flow\medium.txt"
+### Phase 2 input: `data/facility_optimization/*.txt`
+
+```text
+W D C
+budget
+W supply values
+C demand values
+D lines: opening_cost handling_capacity status
+M
+M lines: from_node to_node route_capacity
 ```
 
-Run the large input:
+For each DC row, `status = 0` means the DC already exists and is always active. Its opening cost must be zero. `status = 1` means it is an optional candidate that the algorithms may open, subject to the budget.
 
-```powershell
-cmd /c ".\network_flow.exe < data\network_flow\large.txt"
+## Build and run
+
+Run these commands from the repository root. No CMake or Makefile is required.
+
+### Linux, macOS, or Fish shell
+
+Compile Phase 1:
+
+```fish
+g++ -O2 -std=c++17 -Wall -Wextra -pedantic src/network_flow.cpp -o network_flow
 ```
 
-**Performance note:** Ford–Fulkerson uses DFS to find augmenting paths and can be slow on a large graph. The large run executes both algorithms for comparison, so it may take noticeably longer than running Dinic alone. Use the small and medium files for quick iteration.
+Run Phase 1 with the small, medium, or large dataset:
 
-### 2. Build and run the facility-optimization program
-
-Compile:
-
-```powershell
-g++ -O2 -std=c++17 src/facility_optimizer.cpp -o facility_optimizer.exe
-```
-
-Run the small input (includes the exact Backtracking baseline):
-
-```powershell
-cmd /c ".\facility_optimizer.exe < data\facility_optimization\small.txt"
-```
-
-The included medium facility dataset has 24 optional candidates, which exceeds the exact-search limit of 18. The program will stop with a clear message rather than begin an impractically large exhaustive search. Use the small and large facility datasets for runnable exact-search examples.
-
-Run the large input with Backtracking:
-
-```powershell
-cmd /c ".\facility_optimizer.exe < data\facility_optimization\large.txt"
-```
-
-Backtracking is the only facility-selection algorithm in this project. The implementation supports up to 18 optional candidate facilities; it stops with a clear message if that limit is exceeded. Exhaustive Backtracking grows exponentially with the number of optional candidates, so use the medium and large inputs only when their candidate counts are within the supported limit. The included large input has 12 optional candidates, giving at most 4,096 subsets.
-
-### Linux or macOS
-
-Compile with the same `g++` commands, then use shell input redirection directly. For example:
-
-```bash
+```fish
 ./network_flow < data/network_flow/small.txt
+./network_flow < data/network_flow/medium.txt
+./network_flow < data/network_flow/large.txt
+```
+
+Compile Phase 2:
+
+```fish
+g++ -O2 -std=c++17 -Wall -Wextra -pedantic src/facility_optimizer.cpp -o facility_optimizer
+```
+
+Run the facility optimizer:
+
+```fish
 ./facility_optimizer < data/facility_optimization/small.txt
+./facility_optimizer < data/facility_optimization/medium.txt
 ./facility_optimizer < data/facility_optimization/large.txt
 ```
 
-## How the network-flow input works
+### Windows PowerShell
 
-`network_flow.cpp` reads a whitespace-separated text file in this order:
+```powershell
+g++ -O2 -std=c++17 -Wall -Wextra -pedantic src/network_flow.cpp -o network_flow.exe
+cmd /c ".\network_flow.exe < data\network_flow\small.txt"
 
-1. `W D C`: number of warehouses, distribution centers, and customer zones.
-2. `W` nonnegative warehouse supply values.
-3. `C` nonnegative customer demand values.
-4. `M`: number of directed routes.
-5. `M` rows of `from_node to_node capacity`.
+g++ -O2 -std=c++17 -Wall -Wextra -pedantic src/facility_optimizer.cpp -o facility_optimizer.exe
+cmd /c ".\facility_optimizer.exe < data\facility_optimization\small.txt"
+```
 
-Real node IDs are assigned consecutively: warehouses `1..W`, DCs `W+1..W+D`, and customers `W+D+1..W+D+C`. Route capacities, supplies, and demands must be nonnegative. The program adds a super-source connected to warehouses by their supply capacities and connects each customer to a super-sink by its demand capacity.
+Replace `small.txt` with `medium.txt` or `large.txt` to run a different dataset.
 
-The output includes both maximum-flow results, algorithm runtimes, and a minimum-cut validation. For a correct implementation, the maximum-flow value equals the capacity of the minimum cut found from the final residual graph.
+## Understanding the output
 
-## How the facility-optimization input works
+### Phase 1
 
-`facility_optimizer.cpp` reads:
+- `Ford-Fulkerson maximum flow` and `Dinic maximum flow`: total modeled units per day that can be sent from warehouses to customer zones.
+- `Algorithm agreement`: `PASS` when both algorithms return the same flow.
+- `Minimum-cut capacity`: capacity of the cut found using the final residual graph. The cut can include supply edges, route edges, DC handling-capacity edges, or customer-demand edges.
+- `Max-flow/min-cut check`: `PASS` when the computed cut capacity equals Dinic's maximum flow.
+- Runtime values are measured on the machine executing the program and will vary by hardware and system load.
 
-1. `W D C`: number of warehouses, DCs, and customer zones.
-2. `budget`: maximum total opening cost for optional DCs.
-3. `W` warehouse supply values.
-4. `C` customer demand values.
-5. `D` rows of `opening_cost handling_capacity status`.
-   - `status = 0`: existing facility; it is always active and must have opening cost `0`.
-   - `status = 1`: optional candidate facility; it can be opened if the budget allows.
-6. `M`: number of directed routes.
-7. `M` rows of `from_node to_node capacity`.
+### Phase 2
 
-Node IDs follow the same warehouse/DC/customer convention as the network-flow input. The program splits each real node into an in-node and an out-node; the edge between them enforces the DC's handling capacity. A closed candidate DC receives zero capacity, preventing flow from passing through it. Route capacities and customer demands also constrain the achievable flow.
+Each algorithm reports maximum flow, opening cost, budget, and selected optional DC IDs. Runtime and flow-evaluation counts are also printed. One flow evaluation reconstructs the network and runs Dinic, so its cost depends on the graph size.
 
-The objective is to maximize delivered flow while respecting the opening budget:
+Backtracking is skipped when there are more than 18 optional candidates. Greedy and Local Search still run. This limit is a practical guard against exponential search, not a limitation of the optimization model itself.
 
-\[
-\max_X \operatorname{MaxFlow}(G_X), \qquad \sum_{i\in X} c_i \le B.
-\]
+## Algorithms and complexity
 
-Here, `X` is the selected set of optional DCs, `c_i` is the opening cost, and `B` is the budget.
+Let `V` be the number of real nodes, `E` the number of directed routes, and `K` the number of optional DCs.
 
-## Algorithms and interpretation
+- **Ford–Fulkerson:** DFS-based augmenting paths. Runtime depends on capacities and the augmenting-path sequence; it can be slow on large networks.
+- **Dinic:** level-graph BFS and blocking-flow DFS. The standard general-graph bound is `O(V^2 E)`; practical performance depends on graph structure.
+- **Backtracking:** up to `O(2^K)` facility subsets, each requiring a maximum-flow evaluation. Budget pruning safely skips branches whose accumulated opening cost exceeds the budget.
+- **Greedy:** at each step evaluates each affordable unopened DC to estimate its marginal flow gain. This implementation is a heuristic and does not promise a globally optimal result or a formal approximation ratio.
+- **Local Search:** repeatedly evaluates neighboring selections (add, pair-add, one-for-two replacement, remove, and swap). It stops when no tested neighbor improves the current solution. It is a heuristic and can stop at a local optimum.
 
-### Network flow
+Because every subset or neighborhood move triggers a fresh flow computation, facility optimization can take significantly longer than a single Phase 1 run.
 
-- **Ford–Fulkerson:** repeatedly finds an augmenting path using depth-first search.
-- **Dinic:** uses BFS level graphs and DFS blocking flows; generally better suited to larger networks.
-- **Minimum cut:** identifies a capacity bottleneck separating the source side from the sink side after maximum flow is reached.
+## Datasets and assumptions
 
-### Facility selection
+The repository includes small, medium, and large text inputs for each phase. The large network-flow case models 100 warehouses, 2,630 DCs, 19,000 customer zones, and 37,436 directed routes. The datasets are synthetic and intended for algorithmic experiments; they are not actual company logistics records.
 
-- **Backtracking:** enumerates feasible subsets of optional facilities and gives an exact optimum when it completes its search. Its worst-case search grows as \(O(2^K)\) subsets for `K` candidates, with a max-flow computation at each leaf.
-Backtracking explores feasible combinations of optional facilities and evaluates each complete subset using Dinic. It maximizes total flow subject to the opening budget. If multiple subsets achieve the same maximum flow, the implementation prefers the lower opening cost, then uses a deterministic tie-break. Since all opening costs are nonnegative, any branch whose accumulated cost exceeds the budget can safely be pruned.
+The model assumes:
 
-When Backtracking completes, the result is globally optimal for the supplied instance, subject to the stated model and input. Runtime depends on the computer, compiler, input size, and number of flow evaluations.
+- A static directed network with integer capacities.
+- Warehouse supply, customer demand, route capacity, DC handling capacity, and facility opening cost are known inputs.
+- Each unit of flow consumes one unit of capacity on every traversed route and at each traversed DC.
+- DC handling capacity is shared across all flow passing through that DC.
+- Opening a candidate DC enables its handling capacity; it does not create or modify transportation routes.
+- The optimization objective is maximum flow first, then minimum opening cost among equal-flow solutions.
 
-## Recommended experiment workflow
+## Limitations
 
-1. Run both programs with their small inputs to understand the output.
-2. Run the medium inputs and record maximum flow, opening cost, runtime, and selected DCs.
-3. Run the large network-flow input; expect Ford–Fulkerson to take longer.
-4. Run Backtracking on the large facility-optimization input.
-5. Compare its selected facilities, total opening cost, and maximum flow against the budget and network constraints.
-6. Record the machine and compiler settings when reporting timings.
+- Backtracking is exact only when it completes the full search; the implementation limits it to 18 candidates by default.
+- Greedy and Local Search are useful baselines but do not have a proven approximation guarantee for this objective.
+- The synthetic data is a simplified model. It does not include travel time, vehicle routing, multiple commodities, uncertainty, or time-varying capacity.
+- Ford–Fulkerson is included for algorithm comparison and may be slow on the large network.
 
-## Input and modeling assumptions
+## Repository design
 
-- All routes are directed; a reverse route must be listed separately if it exists.
-- Capacities, supply, demand, and costs are nonnegative integers.
-- Facility opening cost is a budget cost, not a transportation cost.
-- The model maximizes flow; it does not minimize travel distance, route cost, or delivery time.
-- Facility capacities are enforced by node splitting in the facility-optimization program.
-- All large-scale figures are synthetic and should be described as modeled units, not real-world shipment counts.
-
-## Troubleshooting
-
-- **`cannot open` / input is not found:** run the command from the repository root and copy the relative path exactly.
-- **`g++` is not recognized:** install a C++ toolchain and ensure `g++` is on `PATH`.
-- **Facility optimization is slow:** Backtracking is exponential in the number of optional facilities. Keep the candidate count within the implementation limit of 18; the large sample has 12 candidates.
-- **Large network-flow run is slow:** Ford–Fulkerson may be the bottleneck; use small or medium input for rapid development.
-- **Unexpected input errors:** do not mix files between `data/network_flow/` and `data/facility_optimization/`; their formats are different.
-
-## Project scope
-
-OptiRoute is an educational and experimental implementation of maximum-flow/minimum-cut algorithms and budget-constrained facility selection. Its purpose is to demonstrate exact backtracking-based facility selection on controlled synthetic data. It is not a production logistics planner and its synthetic network should not be represented as a real company's internal network.
+The project intentionally keeps the source tree small: two C++ files, two data folders, six `.txt` inputs, and this README. There are no external dependencies, data-generation scripts, or test-framework scaffolding.

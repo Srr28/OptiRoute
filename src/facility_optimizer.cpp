@@ -228,6 +228,142 @@ public:
         return best;
     }
 
+    // Greedy heuristic:
+    // Repeatedly open the affordable DC with the largest marginal flow gain per cost.
+    // This is a heuristic, not a proven approximation algorithm for this problem.
+    Solution greedy() {
+        int K = candidateCount();
+        vector<char> selected(K, false);
+        ll cost = 0;
+        ll currentFlow = evaluateFlow(selected);
+
+        while (true) {
+            int bestIndex = -1;
+            ll bestFlow = currentFlow;
+            long double bestRatio = -1.0L;
+
+            for (int i = 0; i < K; ++i) {
+                if (selected[i]) continue;
+                ll dcCost = facilities[candidates[i]].openingCost;
+                if (cost + dcCost > budget) continue;
+
+                selected[i] = true;
+                ll newFlow = evaluateFlow(selected);
+                selected[i] = false;
+
+                ll gain = newFlow - currentFlow;
+                if (gain <= 0) continue;
+
+                long double ratio;
+                if (dcCost == 0) ratio = numeric_limits<long double>::infinity();
+                else ratio = (long double)gain / (long double)dcCost;
+
+                if (bestIndex == -1 || ratio > bestRatio ||
+                    (ratio == bestRatio && newFlow > bestFlow)) {
+                    bestIndex = i;
+                    bestRatio = ratio;
+                    bestFlow = newFlow;
+                }
+            }
+
+            if (bestIndex == -1) break;
+            selected[bestIndex] = true;
+            cost += facilities[candidates[bestIndex]].openingCost;
+            currentFlow = bestFlow;
+        }
+
+        return makeSolution(selected, currentFlow);
+    }
+
+    // Local Search starts from the Greedy solution. On each iteration it checks:
+    // 1) opening one more DC, 2) closing one selected DC, and 3) swapping two DCs.
+    // It accepts the best strict improvement in flow (or lower cost at equal flow).
+    Solution localSearch() {
+        Solution current = greedy();
+        int K = candidateCount();
+
+        while (true) {
+            Solution best = current;
+
+            // Try adding one closed candidate.
+            for (int i = 0; i < K; ++i) {
+                if (current.open[i]) continue;
+                vector<char> next = current.open;
+                next[i] = true;
+                ll nextCost = selectedCost(next);
+                if (nextCost > budget) continue;
+                Solution candidate = makeSolution(next, evaluateFlow(next));
+                if (better(candidate, best)) best = move(candidate);
+            }
+
+            // Try opening two closed candidates together. This helps when neither
+            // facility improves the flow alone, but the pair does improve it.
+            // Keep this neighborhood limited to moderate candidate counts.
+            if (K <= 40) {
+                for (int i = 0; i < K; ++i) {
+                    if (current.open[i]) continue;
+                    for (int j = i + 1; j < K; ++j) {
+                        if (current.open[j]) continue;
+                        vector<char> next = current.open;
+                        next[i] = true;
+                        next[j] = true;
+                        if (selectedCost(next) > budget) continue;
+                        Solution candidate = makeSolution(next, evaluateFlow(next));
+                        if (better(candidate, best)) best = move(candidate);
+                    }
+                }
+            }
+
+            // Try replacing one selected DC with two currently closed DCs.
+            // This can escape a greedy choice that blocks a better pair.
+            if (K <= 40) {
+                for (int removeIndex = 0; removeIndex < K; ++removeIndex) {
+                    if (!current.open[removeIndex]) continue;
+                    for (int i = 0; i < K; ++i) {
+                        if (current.open[i] || i == removeIndex) continue;
+                        for (int j = i + 1; j < K; ++j) {
+                            if (current.open[j] || j == removeIndex) continue;
+                            vector<char> next = current.open;
+                            next[removeIndex] = false;
+                            next[i] = true;
+                            next[j] = true;
+                            if (selectedCost(next) > budget) continue;
+                            Solution candidate = makeSolution(next, evaluateFlow(next));
+                            if (better(candidate, best)) best = move(candidate);
+                        }
+                    }
+                }
+            }
+
+            // Try removing one selected candidate.
+            for (int i = 0; i < K; ++i) {
+                if (!current.open[i]) continue;
+                vector<char> next = current.open;
+                next[i] = false;
+                Solution candidate = makeSolution(next, evaluateFlow(next));
+                if (better(candidate, best)) best = move(candidate);
+            }
+
+            // Try swapping one selected candidate for one unselected candidate.
+            for (int i = 0; i < K; ++i) {
+                if (!current.open[i]) continue;
+                for (int j = 0; j < K; ++j) {
+                    if (current.open[j]) continue;
+                    vector<char> next = current.open;
+                    next[i] = false;
+                    next[j] = true;
+                    if (selectedCost(next) > budget) continue;
+                    Solution candidate = makeSolution(next, evaluateFlow(next));
+                    if (better(candidate, best)) best = move(candidate);
+                }
+            }
+
+            if (!better(best, current)) break;
+            current = move(best);
+        }
+        return current;
+    }
+
     void printSolution(const string& label, const Solution& solution) const {
         cout << "\n=== " << label << " ===\n";
         if (!solution.valid) {
@@ -341,21 +477,38 @@ int main() {
     cout << "Warehouses: " << W << ", DCs: " << D << ", customers: " << C << '\n';
     cout << "Candidate DCs: " << candidateCount << ", budget: " << budget << '\n';
 
-    const auto start = chrono::steady_clock::now();
+    const auto exactStart = chrono::steady_clock::now();
     Solution exact = optimizer.backtracking();
-    const auto end = chrono::steady_clock::now();
-    const double runtimeMs = chrono::duration<double, milli>(end - start).count();
+    const auto exactEnd = chrono::steady_clock::now();
+    double exactMs = chrono::duration<double, milli>(exactEnd - exactStart).count();
 
     if (exact.valid) {
         optimizer.printSolution("BACKTRACKING (EXACT)", exact);
-        cout << fixed << setprecision(3) << "Runtime: " << runtimeMs << " ms\n";
+        cout << fixed << setprecision(3) << "Runtime: " << exactMs << " ms\n";
     } else {
-        cerr << "No exact result was produced. Reduce the number of optional facilities "
-             << "to the supported limit and try again.\n";
-        return 2;
+        cout << "\n=== BACKTRACKING (EXACT) ===\n";
+        cout << "Skipped because the candidate count exceeds the exact-search limit.\n";
     }
 
-    cout << "Max-flow evaluations: " << optimizer.evaluations() << '\n';
-    cout << "Note: each evaluation rebuilds the residual graph and runs Dinic.\n";
+    long long beforeGreedy = optimizer.evaluations();
+    const auto greedyStart = chrono::steady_clock::now();
+    Solution greedy = optimizer.greedy();
+    const auto greedyEnd = chrono::steady_clock::now();
+    double greedyMs = chrono::duration<double, milli>(greedyEnd - greedyStart).count();
+    optimizer.printSolution("GREEDY HEURISTIC", greedy);
+    cout << fixed << setprecision(3) << "Runtime: " << greedyMs << " ms\n";
+    cout << "Flow evaluations: " << optimizer.evaluations() - beforeGreedy << '\n';
+
+    long long beforeLocal = optimizer.evaluations();
+    const auto localStart = chrono::steady_clock::now();
+    Solution local = optimizer.localSearch();
+    const auto localEnd = chrono::steady_clock::now();
+    double localMs = chrono::duration<double, milli>(localEnd - localStart).count();
+    optimizer.printSolution("LOCAL SEARCH (STARTS FROM GREEDY)", local);
+    cout << fixed << setprecision(3) << "Runtime: " << localMs << " ms\n";
+    cout << "Flow evaluations: " << optimizer.evaluations() - beforeLocal << '\n';
+
+    cout << "\nTotal max-flow evaluations: " << optimizer.evaluations() << '\n';
+    cout << "Note: every evaluation rebuilds the graph and runs Dinic.\n";
     return 0;
 }
