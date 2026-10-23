@@ -1,9 +1,0 @@
-Reference validation invariants (runtime omitted because it depends on the machine):
-W=100 D=2630 C=19000 M=37436
-Total vertices excluding S/T: 21730
-Total supply: 5606465 units/day
-Total demand: 5191173 units/day
-Maximum flow (Dinic): 5041042 units/day
-Demand satisfied: 97.11%
-Minimum-cut capacity: 5041042 units/day
-Max-flow/min-cut check: PASS

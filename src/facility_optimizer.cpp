@@ -472,7 +472,7 @@ int main(int argc, char* argv[]) {
     FacilityOptimizer optimizer(W, D, C, budget, move(supply), move(demand),
                                 move(facilities), move(routes));
 
-    cout << "=== OPTIROUTE PHASE 2: BUDGET-CONSTRAINED FACILITY SELECTION ===\n";
+    cout << "=== OPTIROUTE: FACILITY SELECTION ===\n";
     cout << "Warehouses: " << W << ", DCs: " << D << ", customers: " << C << '\n';
     cout << "Candidate DCs: " << candidateCount << ", budget: " << budget << '\n';
 

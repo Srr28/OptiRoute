@@ -210,7 +210,7 @@ int main() {
     double ffMs = chrono::duration<double, milli>(ffEnd - ffStart).count();
     double dinicMs = chrono::duration<double, milli>(dinicEnd - dinicStart).count();
 
-    cout << "=== PART 1: MAXIMUM FLOW ===\n";
+    cout << "=== OPTIROUTE: MAX-FLOW ANALYSIS ===\n";
     cout << "Ford-Fulkerson maximum flow: " << ffFlow << '\n';
     cout << "Dinic maximum flow:         " << dinicFlow << '\n';
     cout << fixed << setprecision(3);
