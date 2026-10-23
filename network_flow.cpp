@@ -228,130 +228,6 @@ public:
         return best;
     }
 
-    Solution greedy() {
-        int K = candidateCount();
-        vector<char> selected(K, false);
-        ll cost = 0;
-        ll currentFlow = evaluateFlow(selected);
-
-        while (true) {
-            int bestPosition = -1;
-            ll bestFlow = currentFlow;
-            long double bestRatio = -1.0L;
-
-            for (int i = 0; i < K; ++i) {
-                if (selected[i]) continue;
-                ll candidateCost = facilities[candidates[i]].openingCost;
-                if (candidateCost > budget - cost) continue;
-
-                selected[i] = true;
-                ll newFlow = evaluateFlow(selected);
-                selected[i] = false;
-
-                ll gain = newFlow - currentFlow;
-                if (gain <= 0) continue;
-
-                long double ratio = candidateCost == 0
-                    ? numeric_limits<long double>::infinity()
-                    : (long double)gain / (long double)candidateCost;
-
-                if (bestPosition == -1 || ratio > bestRatio ||
-                    (ratio == bestRatio && newFlow > bestFlow)) {
-                    bestPosition = i;
-                    bestRatio = ratio;
-                    bestFlow = newFlow;
-                }
-            }
-
-            if (bestPosition == -1) break;
-            selected[bestPosition] = true;
-            cost += facilities[candidates[bestPosition]].openingCost;
-            currentFlow = bestFlow;
-        }
-
-        return makeSolution(selected, currentFlow);
-    }
-
-    Solution localSearch(const Solution& initial, int maxIterations = 50) {
-        Solution current = initial;
-        if (!current.valid) {
-            vector<char> empty(candidateCount(), false);
-            current = makeSolution(empty, evaluateFlow(empty));
-        }
-
-        const int K = candidateCount();
-        for (int iteration = 0; iteration < maxIterations; ++iteration) {
-            Solution bestNeighbor = current;
-
-            // Neighborhood 1: add one unopened candidate or remove one open candidate.
-            for (int i = 0; i < K; ++i) {
-                vector<char> trial = current.open;
-                trial[i] = !trial[i];
-                ll cost = selectedCost(trial);
-                if (cost > budget) continue;
-
-                Solution neighbor = makeSolution(trial, evaluateFlow(trial));
-                if (better(neighbor, bestNeighbor)) bestNeighbor = move(neighbor);
-            }
-
-            // Neighborhood 2: swap one open candidate for one closed candidate.
-            // This can improve the solution when the budget is already full.
-            for (int i = 0; i < K; ++i) {
-                if (!current.open[i]) continue;
-                for (int j = 0; j < K; ++j) {
-                    if (current.open[j]) continue;
-                    vector<char> trial = current.open;
-                    trial[i] = false;
-                    trial[j] = true;
-                    ll cost = selectedCost(trial);
-                    if (cost > budget) continue;
-
-                    Solution neighbor = makeSolution(trial, evaluateFlow(trial));
-                    if (better(neighbor, bestNeighbor)) bestNeighbor = move(neighbor);
-                }
-            }
-
-            // Pair-add and pair-swap neighborhoods help detect complementarity:
-            // two facilities can improve flow even when neither improves it alone.
-            // Keep these O(K^2) neighborhoods limited to modest candidate sets.
-            if (K <= 40) {
-                for (int i = 0; i < K; ++i) {
-                    if (current.open[i]) continue;
-                    for (int j = i + 1; j < K; ++j) {
-                        if (current.open[j]) continue;
-
-                        // Add both candidates without removing any selected facility.
-                        ll pairCost = facilities[candidates[i]].openingCost
-                                    + facilities[candidates[j]].openingCost;
-                        if (pairCost <= budget - current.cost) {
-                            vector<char> trial = current.open;
-                            trial[i] = trial[j] = true;
-                            Solution neighbor = makeSolution(trial, evaluateFlow(trial));
-                            if (better(neighbor, bestNeighbor)) bestNeighbor = move(neighbor);
-                        }
-
-                        // Swap one selected facility for two unopened facilities.
-                        // This lets local search escape a greedy choice that uses budget.
-                        for (int remove = 0; remove < K; ++remove) {
-                            if (!current.open[remove]) continue;
-                            vector<char> trial = current.open;
-                            trial[remove] = false;
-                            trial[i] = trial[j] = true;
-                            if (selectedCost(trial) > budget) continue;
-                            Solution neighbor = makeSolution(trial, evaluateFlow(trial));
-                            if (better(neighbor, bestNeighbor)) bestNeighbor = move(neighbor);
-                        }
-                    }
-                }
-            }
-
-            if (!better(bestNeighbor, current)) break;
-            current = move(bestNeighbor);
-        }
-
-        return current;
-    }
-
     void printSolution(const string& label, const Solution& solution) const {
         cout << "\n=== " << label << " ===\n";
         if (!solution.valid) {
@@ -374,20 +250,9 @@ public:
     }
 };
 
-int main(int argc, char* argv[]) {
+int main() {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
-
-    bool heuristicsOnly = false;
-    for (int i = 1; i < argc; ++i) {
-        string arg = argv[i];
-        if (arg == "--heuristics-only") heuristicsOnly = true;
-        else {
-            cerr << "Unknown argument: " << arg << "\n"
-                 << "Supported argument: --heuristics-only\n";
-            return 1;
-        }
-    }
 
     int W, D, C;
     ll budget;
@@ -476,47 +341,21 @@ int main(int argc, char* argv[]) {
     cout << "Warehouses: " << W << ", DCs: " << D << ", customers: " << C << '\n';
     cout << "Candidate DCs: " << candidateCount << ", budget: " << budget << '\n';
 
-    Solution exact;
-    if (heuristicsOnly) {
-        cout << "Backtracking skipped by --heuristics-only (recommended for large graphs).\n";
+    const auto start = chrono::steady_clock::now();
+    Solution exact = optimizer.backtracking();
+    const auto end = chrono::steady_clock::now();
+    const double runtimeMs = chrono::duration<double, milli>(end - start).count();
+
+    if (exact.valid) {
+        optimizer.printSolution("BACKTRACKING (EXACT)", exact);
+        cout << fixed << setprecision(3) << "Runtime: " << runtimeMs << " ms\n";
     } else {
-        auto start = chrono::steady_clock::now();
-        exact = optimizer.backtracking();
-        auto end = chrono::steady_clock::now();
-        double backtrackingMs = chrono::duration<double, milli>(end - start).count();
-        if (exact.valid) optimizer.printSolution("BACKTRACKING (EXACT ON SMALL INSTANCES)", exact);
-        cout << fixed << setprecision(3);
-        if (exact.valid) cout << "Runtime: " << backtrackingMs << " ms\n";
+        cerr << "No exact result was produced. Reduce the number of optional facilities "
+             << "to the supported limit and try again.\n";
+        return 2;
     }
 
-    auto start = chrono::steady_clock::now();
-    Solution greedy = optimizer.greedy();
-    auto end = chrono::steady_clock::now();
-    double greedyMs = chrono::duration<double, milli>(end - start).count();
-    optimizer.printSolution("GREEDY", greedy);
-    cout << fixed << setprecision(3) << "Runtime: " << greedyMs << " ms\n";
-
-    start = chrono::steady_clock::now();
-    Solution local = optimizer.localSearch(greedy);
-    end = chrono::steady_clock::now();
-    double localMs = chrono::duration<double, milli>(end - start).count();
-    optimizer.printSolution("LOCAL SEARCH (STARTED FROM GREEDY)", local);
-    cout << fixed << setprecision(3) << "Runtime: " << localMs << " ms\n";
-
-    if (exact.valid && exact.flow > 0) {
-        cout << "\nGreedy flow gap vs exact: "
-             << fixed << setprecision(2)
-             << (100.0 * (exact.flow - greedy.flow) / exact.flow) << "%\n";
-        cout << "Local-search flow gap vs exact: "
-             << fixed << setprecision(2)
-             << (100.0 * (exact.flow - local.flow) / exact.flow) << "%\n";
-    } else if (exact.valid) {
-        cout << "\nExact flow is zero; percentage optimality gaps are undefined.\n";
-    } else {
-        cout << "\nExact comparison unavailable because the candidate count exceeds the backtracking limit.\n";
-    }
-
-    cout << "Total max-flow evaluations: " << optimizer.evaluations() << '\n';
+    cout << "Max-flow evaluations: " << optimizer.evaluations() << '\n';
     cout << "Note: each evaluation rebuilds the residual graph and runs Dinic.\n";
     return 0;
 }
